@@ -65,6 +65,16 @@ in
       description = "PVE_DNS(スペース区切りのDNSサーバー一覧)。";
     };
 
+    nodeName = lib.mkOption {
+      type = lib.types.str;
+      default = "pve";
+      description = ''
+        コンテナのホスト名(PVEのノード名として表示される)。
+        未指定のままだとPodmanが割り当てるコンテナID(ハッシュ値)が
+        そのままノード名になってしまうため、明示的に設定する。
+      '';
+    };
+
     openFirewall = lib.mkOption {
       type = lib.types.bool;
       default = true;
@@ -141,6 +151,7 @@ in
       extraOptions = [
         "--systemd=always"
         "--privileged"
+        "--hostname=${cfg.nodeName}"
         "--network=${cfg.networkName}"
         "--ip=${cfg.pveIp}"
         "--device=/dev/kvm"
