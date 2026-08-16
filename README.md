@@ -106,9 +106,11 @@ podman network rm pve-macvlan
 
 ## 検証状況
 
-2026-08-16時点、arm64ネイティブ環境(colima)でのビルド・pmxcfs/pveproxy/pvedaemonの
-起動確認は完了。Podman + macvlan + `/dev/kvm`パススルーの組み合わせでの実機(Intel)
-最終確認は未実施([doc/SPEC.md](doc/SPEC.md) 6節参照)。
+2026-08-16、arm64ネイティブ環境(colima)でのビルド・pmxcfs/pveproxy/pvedaemonの
+起動確認に続き、実機(NixOSホスト、Intel)でもPodman + macvlan +
+`/dev/kvm`・`/dev/fuse`パススルーの組み合わせでビルド・起動・Web UI応答まで
+確認済み(詳細は [doc/SPEC.md](doc/SPEC.md) 6節、[doc/NIXOS.md](doc/NIXOS.md)
+検証状況を参照)。
 
 ## ライセンス
 

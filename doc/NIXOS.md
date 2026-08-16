@@ -110,7 +110,22 @@ macvlanのカーネル制約上、シムがない場合は**Podmanホスト自�
 
 ## 検証状況
 
-2026-08-16時点、`nix flake check` と、ダミー設定での `nixosSystem` 評価
-(`system.build.toplevel` 導出)まではこのマシン上で確認済み。実際のNixOS実機での
-`nixos-rebuild switch` 適用確認は、[SPEC.md](SPEC.md) 6節の他の未解決事項と同様に
-後日実機作業で行う(詳細は [SPEC.md](SPEC.md) 8節参照)。
+2026-08-16、`nix flake check` と、ダミー設定での `nixosSystem` 評価
+(`system.build.toplevel` 導出)を開発機上で確認した後、実機(NixOS 26.05、
+Intel Core i5-10400、NIC `enp1s0`)でも一連の手順を実施し、以下を確認済み。
+
+- ホスト設定をチャンネルベースの `configuration.nix` からflakeベース
+  (別リポジトリ `nixos-config` を作成し `nixos-rebuild build/test/switch --flake`)
+  に移行しても、SSH到達性等の既存動作に影響がないこと。
+- `services.pvePodman` を導入した状態での `nixos-rebuild switch --flake` 適用が
+  成功し、`podman-network-pve-macvlan.service`(macvlanネットワーク作成)・
+  `podman-pve.service`(PVEコンテナ)がいずれも正常起動すること。
+- `podman build` によるイメージビルドが実機(amd64ネイティブ)で完走すること。
+- コンテナ内で `systemctl is-system-running` が `running`、
+  `pve-cluster.service`(pmxcfs)・`pveproxy.service`が正常起動、
+  `systemctl --failed` が0件であること。
+- LAN内の別端末から `https://<PVE_IP>:8006` へアクセスし、PVEログイン画面の
+  HTML応答が返ること(Podmanホスト自身からは前述のmacvlan制約により
+  到達不可なのが期待通りであることも合わせて確認)。
+
+これにより [SPEC.md](SPEC.md) 6節の実機検証事項はすべて解消した。

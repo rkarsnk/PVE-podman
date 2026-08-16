@@ -70,7 +70,7 @@ LAN (例: 192.168.1.0/24)
 2. **rootful固定**: 確定。rootless案は不採用とし、`--privileged` +
    `--systemd=always` のrootful運用で進める(決定事項1・7の通り)。
 
-## 6. 未解決・要検証事項(実機での検証が必要)
+## 6. 検証事項(実機確認済み)
 
 1. **ビルド時のネットワーク到達性**: `Dockerfile` 内で
    `enterprise.proxmox.com`, `download.proxmox.com`, GitHub(`pve-fake-subscription`の
@@ -79,18 +79,22 @@ LAN (例: 192.168.1.0/24)
    完走を確認済み(補足: `proxmox-ve`本体・`pve-manager`・`qemu-server`・
    `proxmox-kernel`等の依存パッケージはarm64向けにも配布されている。当初
    「amd64限定」と誤認していたが実際にはarm64も提供されている)。
-   Podman実機(Intel)での最終確認は後日実機作業時に行う(保留)。
+   2026-08-16、実機(NixOSホスト、Intel Core i5-10400、amd64)でも
+   `podman build` の完走を確認済み。
 2. **pve-cluster (pmxcfs) の単一ノード動作確認**: `/dev/fuse` パススルーと
    `--systemd=always` のcgroup委譲設定で `pve-cluster.service` が正常起動するかは
-   実機検証が必要。2026-08-16、colima(arm64ネイティブ)上で
+   実機検証が必要だった。2026-08-16、colima(arm64ネイティブ)上で
    `docker run --privileged`(macvlanは省略しdocker0ブリッジで代用、
    `REQUIRE_KVM=N`)にて起動確認。`systemctl is-system-running` は `running`、
    `pve-cluster.service`(pmxcfs)・`pveproxy.service`・`pvedaemon.service`は
    いずれも正常起動、`systemctl --failed` は0件、コンテナ内・Dockerヘルスチェック
    経由の両方でWeb UI(`https://localhost:8006`)のHTML応答も確認済み。
-   ただしこの検証はmacvlanネットワークと`/dev/kvm`パススルーを含んでおらず、
-   Podman + macvlan + KVMパススルーの組み合わせでの最終確認は
-   後日実機(Intel)作業時に行う(保留)。
+   その後2026-08-16、実機(NixOSホスト、Intel、`nixos/pve-podman.nix`経由で
+   Podman + macvlan + `/dev/kvm`・`/dev/fuse`パススルーの完全な組み合わせ)でも
+   同様に `systemctl is-system-running` は `running`、`pve-cluster.service`
+   (pmxcfs)・`pveproxy.service`とも正常起動、`systemctl --failed` は0件、
+   LAN内の別端末から `https://192.168.24.51:8006` へのアクセスでPVEログイン画面の
+   HTML応答も確認済み。これにより本節の全項目の検証が完了した。
 
 ## 7. 決定済み(2026-08-16 追記・2巡目)
 
