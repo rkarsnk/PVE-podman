@@ -6,8 +6,8 @@
 # NETWORK=N を指定すると configureNAT() を実行せず、
 # /etc/network/interfaces には一切手を触れない。
 #
-# このスクリプトはその代わりに、Podmanのmacvlanネットワークで払い出された
-# NIC (既定 eth0) を「物理NIC相当」として vmbr0 にブリッジする
+# このスクリプトはその代わりに、Podmanのbridgeネットワークで払い出された
+# veth (既定 eth0) を「物理NIC相当」として vmbr0 にブリッジする
 # /etc/network/interfaces を生成する。entrypoint-wrapper.sh から
 # entrypoint.sh より先に呼ばれる想定。
 #
@@ -30,18 +30,18 @@ error () { printf "%b%s%b" "\E[1;31m❯ " "ERROR: ${1:-}" "\E[0m\n" >&2; }
 : "${PVE_DNS:=""}"
 
 if [ -z "$PVE_IP" ]; then
-  error "PVE_IP is required (static IP for the macvlan interface)."
+  error "PVE_IP is required (static IP for the bridge interface)."
   exit 1
 fi
 
 if [ -z "$PVE_GATEWAY" ]; then
-  error "PVE_GATEWAY is required (default gateway reachable via the macvlan interface)."
+  error "PVE_GATEWAY is required (default gateway reachable via the bridge interface)."
   exit 1
 fi
 
 if [ ! -d "/sys/class/net/${PVE_IFACE}" ]; then
   error "Network interface '${PVE_IFACE}' does not exist inside the container."
-  error "Check that the container was started with --network <macvlan-network> and that PVE_IFACE matches the interface name Podman assigned."
+  error "Check that the container was started with --network <bridge-network> and that PVE_IFACE matches the interface name Podman assigned."
   exit 1
 fi
 
@@ -51,7 +51,7 @@ cat > /etc/network/interfaces <<EOF
 auto lo
 iface lo inet loopback
 
-# ${PVE_IFACE} は Podman の macvlan ネットワークで払い出された NIC。
+# ${PVE_IFACE} は Podman の bridge ネットワークで払い出された veth。
 # ベアメタルPVEでいう「物理NIC」に相当するので、それ自体にはIPを振らず
 # vmbr0 のブリッジポートとして使う。
 auto ${PVE_IFACE}

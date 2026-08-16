@@ -1,6 +1,7 @@
 # NixOSモジュール: Podman上でPVEコンテナをデプロイするホスト設定。
-# doc/SPEC.md の決定事項(rootful Podman, macvlan, /dev/kvm・/dev/fuseパススルー,
-# --systemd=always)をNixOSの宣言的設定として再現する。
+# doc/SPEC.md の決定事項(rootful Podman, ホストLinuxブリッジ+Podman bridge
+# ネットワーク, /dev/kvm・/dev/fuseパススルー, --systemd=always)を
+# NixOSの宣言的設定として再現する。
 #
 # イメージ自体(Dockerfileのビルド)はNixのサンドボックス外で
 # `podman build -t <config.services.pvePodman.image> .` を実行して用意すること。
@@ -25,14 +26,24 @@ in
 
     networkName = lib.mkOption {
       type = lib.types.str;
-      default = "pve-macvlan";
-      description = "作成するPodman macvlanネットワーク名。";
+      default = "pve-bridge";
+      description = "作成するPodman bridgeネットワーク名。";
+    };
+
+    bridgeName = lib.mkOption {
+      type = lib.types.str;
+      default = "br-pve";
+      description = ''
+        parentIfaceをポートとして作成するホスト側Linuxブリッジ名。
+        ホスト自身のIP(DHCP/static)は、parentIfaceではなくこの
+        ブリッジインターフェースに設定する必要がある(doc/NIXOS.md参照)。
+      '';
     };
 
     parentIface = lib.mkOption {
       type = lib.types.str;
       example = "eth0";
-      description = "macvlanの親にする物理NIC名。";
+      description = "bridgeNameのポートにする物理NIC名。";
     };
 
     subnet = lib.mkOption {
@@ -104,11 +115,19 @@ in
 
     networking.firewall.allowedTCPPorts = lib.mkIf cfg.openFirewall [ 8006 ];
 
-    # host/setup-macvlan.sh 相当を宣言的に実行する oneshot ユニット。
+    # host/setup-bridge.sh 相当のブリッジ作成部分。parentIfaceをポートとする
+    # Linuxブリッジを宣言的に作る。ホスト自身のIP設定はparentIfaceではなく
+    # このブリッジ側へ移す必要がある(doc/NIXOS.md参照。本モジュールの対象外)。
+    networking.bridges.${cfg.bridgeName}.interfaces = [ cfg.parentIface ];
+
+    # host/setup-bridge.sh のPodmanネットワーク作成部分を宣言的に実行する
+    # oneshot ユニット。mode=unmanagedのため、ブリッジ自体(上記)は
+    # Podmanではなくnetworking.bridgesが作成・管理する。
     systemd.services."podman-network-${cfg.networkName}" = {
-      description = "Create podman macvlan network for PVE (${cfg.networkName})";
-      after = [ "network-online.target" ];
+      description = "Create podman bridge network for PVE (${cfg.networkName})";
+      after = [ "network-online.target" "sys-subsystem-net-devices-${cfg.bridgeName}.device" ];
       wants = [ "network-online.target" ];
+      requires = [ "sys-subsystem-net-devices-${cfg.bridgeName}.device" ];
       wantedBy = [ "multi-user.target" ];
       serviceConfig = {
         Type = "oneshot";
@@ -118,8 +137,9 @@ in
         # 既に存在する場合は再作成しない(nixos-rebuild switch を
         # 何度実行しても安全な冪等スクリプトにするため)。
         ${config.virtualisation.podman.package}/bin/podman network exists ${cfg.networkName} || \
-          ${config.virtualisation.podman.package}/bin/podman network create -d macvlan \
-            -o parent=${cfg.parentIface} \
+          ${config.virtualisation.podman.package}/bin/podman network create -d bridge \
+            -o mode=unmanaged \
+            --interface-name ${cfg.bridgeName} \
             --subnet ${cfg.subnet} \
             --gateway ${cfg.gateway} \
             ${cfg.networkName}
@@ -162,7 +182,7 @@ in
     # virtualisation.oci-containers.containers.pve から生成されるユニット名は
     # 慣習的に "podman-pve.service"。oci-containers はネットワーク作成ユニットへの
     # 依存を知らないため、ここで明示的にafter/requiresを追加する
-    # (network create が終わる前にコンテナが起動してmacvlan接続に失敗するのを防ぐ)。
+    # (network create が終わる前にコンテナが起動してbridge接続に失敗するのを防ぐ)。
     systemd.services."podman-${containerName}" = {
       after = [ "podman-network-${cfg.networkName}.service" ];
       requires = [ "podman-network-${cfg.networkName}.service" ];
