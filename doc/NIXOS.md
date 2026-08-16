@@ -52,6 +52,37 @@ sudo nixos-rebuild switch --flake .#myhost
 を参照。macvlanホストシムは[前述の決定](SPEC.md)により対象外としているため、
 このモジュールには含まれていない。
 
+macvlanのカーネル制約上、シムがない場合は**Podmanホスト自身のOSから**
+`https://<PVE_IP>:8006` に直接アクセスすることができない(同じLAN上の
+他の端末からは通常どおりアクセスできる)。ホスト自身からのアクセスが
+必要になった場合は、`networking.macvlans` などでシムIFを追加する対応を
+別途検討すること。
+
+## configuration.nix側で設定・追加すべきこと
+
+`nixos/pve-podman.nix` はPodman/コンテナ/macvlanネットワーク作成のみを担当する。
+以下はモジュールがカバーしないため、ホスト側の `configuration.nix`
+(または相当するflakeモジュール)で別途設定する必要がある。
+
+- **flakes有効化**: `nixos-rebuild switch --flake` を使うには
+  `nix.settings.experimental-features = [ "nix-command" "flakes" ];`
+  が必要(NixOS標準インストールではデフォルト無効)。
+- **ホスト自身のネットワークインターフェース設定**: `services.pvePodman.parentIface`
+  で指定する物理NICに、ホストOS自身のIP(LAN上の到達可能なアドレス)を
+  割り当てておくこと。macvlanは既存の物理NIC設定の上に「乗る」形なので、
+  NIC自体がリンクアップしてLANに接続されている状態が前提(DHCPでもstaticでも可)。
+  この設定自体は本モジュールの対象外。
+- **`system.stateVersion`**: 通常のNixOS構成同様、ホストの初回インストール時の
+  リリースバージョンで固定しておくこと(本モジュールは設定しない)。
+- **SSH等のリモート管理手段**: `nixos-rebuild switch --flake .#myhost` を
+  リモートホストに対して実行する場合、`services.openssh.enable = true;` など
+  リモートアクセス手段を別途有効化しておくこと。
+- **(独自にnftables/iptablesルールを使う場合)ファイアウォールとの整合**:
+  本モジュールは `networking.firewall.allowedTCPPorts` に `8006` を
+  追加するだけ(`services.pvePodman.openFirewall = false` で無効化可)。
+  `networking.nftables.enable` 等で独自ルールセットを使っている場合は、
+  そちらにも同等の許可を追加すること。
+
 ## hardware-configuration.nix側で確認・追加すべきこと
 
 `nixos/pve-podman.nix` はvirtualisation/ネットワーク周りのみを担当し、
