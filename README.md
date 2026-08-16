@@ -22,10 +22,14 @@ pve-podman/
 │   ├── generate-interfaces.sh   # 環境変数からmacvlan構成のinterfacesを生成
 │   └── entrypoint-wrapper.sh    # generate-interfaces.sh実行後、entrypoint.shへexec
 ├── host/
-│   └── setup-macvlan.sh         # Podmanホスト側でmacvlanネットワークを作成
+│   └── setup-macvlan.sh         # Podmanホスト側でmacvlanネットワークを作成(非NixOSホスト向け)
+├── nixos/
+│   └── pve-podman.nix           # NixOSモジュール(ホスト設定+コンテナデプロイの宣言化)
+├── flake.nix                    # 上記モジュールを公開するflake
 └── doc/
     ├── SPEC.md                  # 仕様書・設計判断の記録
-    └── BACKUP.md                # バックアップ/マイグレーション手順書
+    ├── BACKUP.md                # バックアップ/マイグレーション手順書
+    └── NIXOS.md                 # NixOSホストでのデプロイ手順(flake)
 ```
 
 ## セットアップ
@@ -58,6 +62,13 @@ podman run -d \
 
 起動後、LAN内の別端末から `https://192.168.1.50:8006` でPVEのWeb UIにアクセスできる
 (環境変数の詳細は [doc/SPEC.md](doc/SPEC.md) を参照)。
+
+## NixOSホストでのデプロイ(flake)
+
+Debian以外にNixOSをホストにする場合、[flake.nix](flake.nix) と
+[nixos/pve-podman.nix](nixos/pve-podman.nix) でホスト設定とコンテナのデプロイを
+宣言的に管理できる。導入例・`hardware-configuration.nix`側で確認すべき項目は
+[doc/NIXOS.md](doc/NIXOS.md) を参照。
 
 ## 停止・破棄
 
@@ -95,9 +106,11 @@ podman network rm pve-macvlan
 
 ## 検証状況
 
-2026-08-16時点、arm64ネイティブ環境(colima)でのビルド・pmxcfs/pveproxy/pvedaemonの
-起動確認は完了。Podman + macvlan + `/dev/kvm`パススルーの組み合わせでの実機(Intel)
-最終確認は未実施([doc/SPEC.md](doc/SPEC.md) 6節参照)。
+2026-08-16、arm64ネイティブ環境(colima)でのビルド・pmxcfs/pveproxy/pvedaemonの
+起動確認に続き、実機(NixOSホスト、Intel)でもPodman + macvlan +
+`/dev/kvm`・`/dev/fuse`パススルーの組み合わせでビルド・起動・Web UI応答まで
+確認済み(詳細は [doc/SPEC.md](doc/SPEC.md) 6節、[doc/NIXOS.md](doc/NIXOS.md)
+検証状況を参照)。
 
 ## ライセンス
 

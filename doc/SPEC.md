@@ -70,7 +70,7 @@ LAN (例: 192.168.1.0/24)
 2. **rootful固定**: 確定。rootless案は不採用とし、`--privileged` +
    `--systemd=always` のrootful運用で進める(決定事項1・7の通り)。
 
-## 6. 未解決・要検証事項(実機での検証が必要)
+## 6. 検証事項(実機確認済み)
 
 1. **ビルド時のネットワーク到達性**: `Dockerfile` 内で
    `enterprise.proxmox.com`, `download.proxmox.com`, GitHub(`pve-fake-subscription`の
@@ -79,18 +79,22 @@ LAN (例: 192.168.1.0/24)
    完走を確認済み(補足: `proxmox-ve`本体・`pve-manager`・`qemu-server`・
    `proxmox-kernel`等の依存パッケージはarm64向けにも配布されている。当初
    「amd64限定」と誤認していたが実際にはarm64も提供されている)。
-   Podman実機(Intel)での最終確認は後日実機作業時に行う(保留)。
+   2026-08-16、実機(NixOSホスト、Intel Core i5-10400、amd64)でも
+   `podman build` の完走を確認済み。
 2. **pve-cluster (pmxcfs) の単一ノード動作確認**: `/dev/fuse` パススルーと
    `--systemd=always` のcgroup委譲設定で `pve-cluster.service` が正常起動するかは
-   実機検証が必要。2026-08-16、colima(arm64ネイティブ)上で
+   実機検証が必要だった。2026-08-16、colima(arm64ネイティブ)上で
    `docker run --privileged`(macvlanは省略しdocker0ブリッジで代用、
    `REQUIRE_KVM=N`)にて起動確認。`systemctl is-system-running` は `running`、
    `pve-cluster.service`(pmxcfs)・`pveproxy.service`・`pvedaemon.service`は
    いずれも正常起動、`systemctl --failed` は0件、コンテナ内・Dockerヘルスチェック
    経由の両方でWeb UI(`https://localhost:8006`)のHTML応答も確認済み。
-   ただしこの検証はmacvlanネットワークと`/dev/kvm`パススルーを含んでおらず、
-   Podman + macvlan + KVMパススルーの組み合わせでの最終確認は
-   後日実機(Intel)作業時に行う(保留)。
+   その後2026-08-16、実機(NixOSホスト、Intel、`nixos/pve-podman.nix`経由で
+   Podman + macvlan + `/dev/kvm`・`/dev/fuse`パススルーの完全な組み合わせ)でも
+   同様に `systemctl is-system-running` は `running`、`pve-cluster.service`
+   (pmxcfs)・`pveproxy.service`とも正常起動、`systemctl --failed` は0件、
+   LAN内の別端末から `https://192.168.24.51:8006` へのアクセスでPVEログイン画面の
+   HTML応答も確認済み。これにより本節の全項目の検証が完了した。
 
 ## 7. 決定済み(2026-08-16 追記・2巡目)
 
@@ -98,20 +102,34 @@ LAN (例: 192.168.1.0/24)
    `doc/BACKUP.md` として整備する。
 2. **VMディスク形式**: qcow2で確定。
 
-## 8. 提供ファイル一覧
+## 8. NixOSホスト対応(2026-08-16 追記)
+
+Debian 13以外にNixOSもホストOSとして許容する。ホスト設定(Podman有効化・
+`/dev/fuse`用カーネルモジュール・ファイアウォール・macvlanネットワーク作成)と
+コンテナのデプロイ(`virtualisation.oci-containers`)を `flake.nix` /
+`nixos/pve-podman.nix` で宣言的に管理できるようにした
+(`host/setup-macvlan.sh` 相当の処理はsystemd oneshotユニットとして再実装。
+non-NixOSホスト向けにシェルスクリプトの方も残す)。導入手順・検証状況・
+`hardware-configuration.nix`側で確認すべき項目は [NIXOS.md](NIXOS.md) を参照。
+
+## 9. 提供ファイル一覧
 
 ```text
 pve-podman/
 ├── SPEC.md                     # 本ファイル
-├── BACKUP.md                   # 新規: バックアップ/マイグレーション手順書
+├── BACKUP.md                   # バックアップ/マイグレーション手順書
+├── NIXOS.md                    # NixOSホストでのデプロイ手順(8節参照)
 ├── Dockerfile                  # dockur/proxmox をベースに ENTRYPOINT を差し替え
 ├── src/
 │   ├── entrypoint.sh            # dockur/proxmox オリジナル(無改造)
 │   ├── network.sh               # dockur/proxmox オリジナル(無改造。NETWORK=Nで無効化して使う)
-│   ├── generate-interfaces.sh   # 新規: 環境変数からmacvlan構成のinterfacesを生成
-│   └── entrypoint-wrapper.sh    # 新規: generate-interfaces.sh実行後、entrypoint.shへexec
-└── host/
-    └── setup-macvlan.sh         # 新規: Podmanホスト側でmacvlanネットワークを作成
+│   ├── generate-interfaces.sh   # 環境変数からmacvlan構成のinterfacesを生成
+│   └── entrypoint-wrapper.sh    # generate-interfaces.sh実行後、entrypoint.shへexec
+├── host/
+│   └── setup-macvlan.sh         # Podmanホスト側でmacvlanネットワークを作成(非NixOSホスト向け)
+├── nixos/
+│   └── pve-podman.nix           # NixOSモジュール(8節参照)
+└── flake.nix                   # 上記モジュールを公開するflake
 ```
 
 `src/entrypoint.sh` と `src/network.sh` は
@@ -120,7 +138,7 @@ pve-podman/
 `NETWORK=N` を渡すことで、末尾の `disabled "$NETWORK" && return 0` により
 NAT構成処理(`configureNAT`)がスキップされる仕組みになっている。
 
-## 9. コンテナ実行時の環境変数
+## 10. コンテナ実行時の環境変数
 
 | 変数 | 必須 | 既定値 | 説明 |
 | - | - | - | - |
@@ -134,7 +152,7 @@ NAT構成処理(`configureNAT`)がスキップされる仕組みになってい�
 | `REQUIRE_FUSE` | いいえ | `Y` | `/dev/fuse` の必須チェック有無(pmxcfsに必要) |
 | `PASSWORD` | いいえ | `root` | rootパスワード |
 
-## 10. 実行コマンド例
+## 11. 実行コマンド例
 
 ```bash
 # 1. ホスト側でmacvlanネットワークを準備
@@ -162,6 +180,6 @@ podman run -d \
   pve-podman:latest
 ```
 
-## 11. 参考
+## 12. 参考
 
 - <https://github.com/dockur/proxmox> — Dockerfile / entrypoint.sh / network.sh のベース実装
