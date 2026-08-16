@@ -103,16 +103,10 @@ LAN (例: 192.168.1.0/24)
 Debian 13以外にNixOSもホストOSとして許容する。ホスト設定(Podman有効化・
 `/dev/fuse`用カーネルモジュール・ファイアウォール・macvlanネットワーク作成)と
 コンテナのデプロイ(`virtualisation.oci-containers`)を `flake.nix` /
-`nixos/pve-podman.nix` で宣言的に管理できるようにした。
-
-- イメージのビルド(`Dockerfile`)はDebian/Proxmoxのaptリポジトリへの
-  ネットワークアクセスを伴うため、Nixの純粋ビルドの対象外とする。従来どおり
-  `podman build`(または `nix run .#build-image`)で用意する前提は変えない。
-- `host/setup-macvlan.sh` 相当の処理は `nixos/pve-podman.nix` 内のsystemd
-  oneshotユニットとして再実装した(non-NixOSホスト向けにシェルスクリプトの方も残す)。
-- `nix flake check` と `nixosSystem` によるモジュール評価(ダミー設定での
-  `system.build.toplevel` 導出)まではこのマシン上で確認済み。実際のNixOS実機での
-  `nixos-rebuild switch` 適用確認は、他の未解決事項(6節)と同様に後日実機作業で行う。
+`nixos/pve-podman.nix` で宣言的に管理できるようにした
+(`host/setup-macvlan.sh` 相当の処理はsystemd oneshotユニットとして再実装。
+non-NixOSホスト向けにシェルスクリプトの方も残す)。導入手順・検証状況・
+`hardware-configuration.nix`側で確認すべき項目は [NIXOS.md](NIXOS.md) を参照。
 
 ## 9. 提供ファイル一覧
 
@@ -120,6 +114,7 @@ Debian 13以外にNixOSもホストOSとして許容する。ホスト設定(Pod
 pve-podman/
 ├── SPEC.md                     # 本ファイル
 ├── BACKUP.md                   # バックアップ/マイグレーション手順書
+├── NIXOS.md                    # NixOSホストでのデプロイ手順(8節参照)
 ├── Dockerfile                  # dockur/proxmox をベースに ENTRYPOINT を差し替え
 ├── src/
 │   ├── entrypoint.sh            # dockur/proxmox オリジナル(無改造)

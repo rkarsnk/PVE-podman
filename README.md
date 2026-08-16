@@ -28,7 +28,8 @@ pve-podman/
 ├── flake.nix                    # 上記モジュールを公開するflake
 └── doc/
     ├── SPEC.md                  # 仕様書・設計判断の記録
-    └── BACKUP.md                # バックアップ/マイグレーション手順書
+    ├── BACKUP.md                # バックアップ/マイグレーション手順書
+    └── NIXOS.md                 # NixOSホストでのデプロイ手順(flake)
 ```
 
 ## セットアップ
@@ -65,52 +66,9 @@ podman run -d \
 ## NixOSホストでのデプロイ(flake)
 
 Debian以外にNixOSをホストにする場合、[flake.nix](flake.nix) と
-[nixos/pve-podman.nix](nixos/pve-podman.nix) でホスト設定(Podman有効化・
-`/dev/fuse`用カーネルモジュール・ファイアウォール・macvlanネットワーク作成)と
-コンテナのデプロイ(`virtualisation.oci-containers`)を宣言的に管理できる。
-
-イメージのビルド(`podman build`)は、Debian/Proxmoxのaptリポジトリへの
-ネットワークアクセスを伴うためNixの純粋ビルドの対象外とし、従来どおり
-`podman build`(または `nix run .#build-image`)で用意しておく。
-
-自分のNixOS構成に取り込む例:
-
-```nix
-{
-  inputs.pve-podman.url = "git+https://<このリポジトリのURL>";
-
-  outputs = { self, nixpkgs, pve-podman, ... }: {
-    nixosConfigurations.myhost = nixpkgs.lib.nixosSystem {
-      system = "x86_64-linux";
-      modules = [
-        pve-podman.nixosModules.default
-        {
-          services.pvePodman = {
-            enable = true;
-            parentIface = "eth0";
-            subnet = "192.168.1.0/24";
-            gateway = "192.168.1.1";
-            pveIp = "192.168.1.50";
-            pveDns = "192.168.1.1";
-          };
-        }
-      ];
-    };
-  };
-}
-```
-
-```bash
-# イメージをビルド(このリポジトリ内で)
-nix run .#build-image
-
-# ホストに適用
-sudo nixos-rebuild switch --flake .#myhost
-```
-
-`services.pvePodman` の全オプションは [nixos/pve-podman.nix](nixos/pve-podman.nix)
-を参照。macvlanホストシムは[前述の決定](doc/SPEC.md)により対象外としているため、
-このモジュールには含まれていない。
+[nixos/pve-podman.nix](nixos/pve-podman.nix) でホスト設定とコンテナのデプロイを
+宣言的に管理できる。導入例・`hardware-configuration.nix`側で確認すべき項目は
+[doc/NIXOS.md](doc/NIXOS.md) を参照。
 
 ## 停止・破棄
 
