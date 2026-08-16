@@ -97,9 +97,16 @@ macvlanのカーネル制約上、シムがない場合は**Podmanホスト自�
   で実際のホストと一致している必要がある。`ip link` で確認する。
 - **仮想化拡張の有効化**: BIOS/UEFI側でIntel VT-x/AMD-Vが有効になっていること
   (Nix設定ではなくファームウェア側の前提条件)。
-- **(impermanence構成を使う場合)永続化パス**: rootを `tmpfs` にする構成では、
-  Podmanのボリューム置き場(既定 `/var/lib/containers`)を永続データセット側に
-  含めること。含めないとホスト再起動でVMディスク・pve-cluster設定が消える。
+- **(impermanence構成を使う場合のみ)永続化パス**: 「impermanence」
+  (rootファイルシステムを`tmpfs`にして再起動ごとに初期化する構成パターン)を
+  意識的に導入している場合のみ関係する項目。この構成では、Podmanのボリューム
+  置き場(既定 `/var/lib/containers`)を永続データセット側に含めないと、
+  ホスト再起動でVMディスク・pve-cluster設定が消える。
+  対応方法はimpermanenceモジュールの `environment.persistence` で
+  `/var/lib/containers` を指定するのが標準的(手動bind mountやPodmanの
+  `graphroot`変更よりも推奨)。
+  **通常インストールのNixOS(impermanenceを使っていない)なら、
+  この項目は無視してよい**。ディスクは最初から永続化されている。
 
 ## 検証状況
 
