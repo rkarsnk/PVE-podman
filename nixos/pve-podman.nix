@@ -73,6 +73,9 @@ in
   };
 
   config = lib.mkIf cfg.enable {
+    # virtualisation.podman.enable はこのモジュール自身で下に設定するため
+    # 通常このassertionが発火することはないが、他モジュール側で
+    # 明示的に false 上書きされた場合に分かりやすいエラーで止めるためのガード。
     assertions = [
       {
         assertion = config.virtualisation.podman.enable;
@@ -81,6 +84,8 @@ in
     ];
 
     virtualisation.podman.enable = true;
+    # oci-containers のデフォルトバックエンドはdocker。doc/SPEC.md 決定事項1の
+    # 通りPodman(rootful)前提のため明示的に上書きする。
     virtualisation.oci-containers.backend = "podman";
 
     # pmxcfs(FUSE)に必要。/dev/kvm 用の kvm-intel/kvm-amd は
@@ -100,6 +105,8 @@ in
         RemainAfterExit = true;
       };
       script = ''
+        # 既に存在する場合は再作成しない(nixos-rebuild switch を
+        # 何度実行しても安全な冪等スクリプトにするため)。
         ${config.virtualisation.podman.package}/bin/podman network exists ${cfg.networkName} || \
           ${config.virtualisation.podman.package}/bin/podman network create -d macvlan \
             -o parent=${cfg.parentIface} \
@@ -113,16 +120,24 @@ in
       image = cfg.image;
       autoStart = true;
       ports = [ "8006:8006" ];
+      # 名前付きボリュームにしているのは doc/BACKUP.md の
+      # `podman volume export/import` 手順とそのまま対応させるため。
+      # ホストパスのbind mountにすると手順が変わってしまう。
       volumes = [
         "pve-var-lib-vz:/var/lib/vz"
         "pve-cluster:/var/lib/pve-cluster"
       ];
       environment = {
-        NETWORK = "N";
+        NETWORK = "N"; # dockur/proxmox標準のNAT機構を無効化(SPEC.md 決定事項5)
         PVE_IP = cfg.pveIp;
         PVE_PREFIX = toString cfg.pvePrefix;
         PVE_GATEWAY = cfg.gateway;
+        # PVE_DNS未指定時にentrypoint側の既定値処理を活かすため、
+        # 空文字ではなく環境変数自体を生やさない(nullなら属性ごと省く)。
       } // lib.optionalAttrs (cfg.pveDns != null) { PVE_DNS = cfg.pveDns; };
+      # oci-containers に systemd/privileged/device専用のオプションがないため
+      # extraOptionsで直接podman runへ渡す。いずれもSPEC.md決定事項
+      # (2・7)でrootful固定・KVM/FUSEパススルー必須と確定済みのもの。
       extraOptions = [
         "--systemd=always"
         "--privileged"
@@ -133,7 +148,10 @@ in
       ];
     };
 
-    # oci-containers はネットワーク作成ユニットへの依存を知らないため明示する。
+    # virtualisation.oci-containers.containers.pve から生成されるユニット名は
+    # 慣習的に "podman-pve.service"。oci-containers はネットワーク作成ユニットへの
+    # 依存を知らないため、ここで明示的にafter/requiresを追加する
+    # (network create が終わる前にコンテナが起動してmacvlan接続に失敗するのを防ぐ)。
     systemd.services."podman-${containerName}" = {
       after = [ "podman-network-${cfg.networkName}.service" ];
       requires = [ "podman-network-${cfg.networkName}.service" ];
