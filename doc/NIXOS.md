@@ -4,8 +4,9 @@
 
 Debian以外にNixOSをホストにする場合、[../flake.nix](../flake.nix) と
 [../nixos/pve-podman.nix](../nixos/pve-podman.nix) でホスト設定(Podman有効化・
-`/dev/fuse`用カーネルモジュール・ファイアウォール・macvlanネットワーク作成)と
-コンテナのデプロイ(`virtualisation.oci-containers`)を宣言的に管理できる。
+`/dev/fuse`用カーネルモジュール・ファイアウォール・ホスト側Linuxブリッジ+
+Podman bridgeネットワーク作成)とコンテナのデプロイ
+(`virtualisation.oci-containers`)を宣言的に管理できる。
 
 イメージのビルド(`podman build`)は、Debian/Proxmoxのaptリポジトリへの
 ネットワークアクセスを伴うためNixの純粋ビルドの対象外とし、従来どおり
@@ -49,29 +50,39 @@ sudo nixos-rebuild switch --flake .#myhost
 ```
 
 `services.pvePodman` の全オプションは [../nixos/pve-podman.nix](../nixos/pve-podman.nix)
-を参照。macvlanホストシムは[前述の決定](SPEC.md)により対象外としているため、
-このモジュールには含まれていない。
-
-macvlanのカーネル制約上、シムがない場合は**Podmanホスト自身のOSから**
-`https://<PVE_IP>:8006` に直接アクセスすることができない(同じLAN上の
-他の端末からは通常どおりアクセスできる)。ホスト自身からのアクセスが
-必要になった場合は、`networking.macvlans` などでシムIFを追加する対応を
-別途検討すること。
+を参照。ネットワークは`parentIface`をポートとする`bridgeName`(既定 `br-pve`)
+というホスト側Linuxブリッジをこのモジュールが宣言的に作成し、その上にPodmanの
+`bridge`ネットワーク(`mode=unmanaged`)を重ねる方式になっている
+([SPEC.md](SPEC.md) 13節)。macvlan方式時代は「ホスト自身から
+PVEコンテナへ到達できない」という制約(macvlanシムがないと解決できない)が
+あったが、本物のLinuxブリッジにはその制約がないため、**Podmanホスト自身の
+OSからも** `https://<PVE_IP>:8006` に直接アクセスできる(同じLAN上の
+他の端末からも通常どおりアクセスできる)。
 
 ## configuration.nix側で設定・追加すべきこと
 
-`nixos/pve-podman.nix` はPodman/コンテナ/macvlanネットワーク作成のみを担当する。
-以下はモジュールがカバーしないため、ホスト側の `configuration.nix`
+`nixos/pve-podman.nix` はPodman/コンテナ/ブリッジ+bridgeネットワーク作成のみを
+担当する。以下はモジュールがカバーしないため、ホスト側の `configuration.nix`
 (または相当するflakeモジュール)で別途設定する必要がある。
 
 - **flakes有効化**: `nixos-rebuild switch --flake` を使うには
   `nix.settings.experimental-features = [ "nix-command" "flakes" ];`
   が必要(NixOS標準インストールではデフォルト無効)。
-- **ホスト自身のネットワークインターフェース設定**: `services.pvePodman.parentIface`
-  で指定する物理NICに、ホストOS自身のIP(LAN上の到達可能なアドレス)を
-  割り当てておくこと。macvlanは既存の物理NIC設定の上に「乗る」形なので、
-  NIC自体がリンクアップしてLANに接続されている状態が前提(DHCPでもstaticでも可)。
-  この設定自体は本モジュールの対象外。
+- **ホスト自身のネットワークインターフェース設定(重要・破壊的変更あり)**:
+  本モジュールは `services.pvePodman.parentIface` で指定した物理NICを
+  `services.pvePodman.bridgeName`(既定 `br-pve`)というLinuxブリッジの
+  ポートにする(`networking.bridges.${bridgeName}.interfaces = [ parentIface ]`)。
+  これにより物理NIC自体はIPを持たなくなるため、**ホストOS自身のIP
+  (LAN上の到達可能なアドレス、DHCPでもstaticでも可)は`parentIface`ではなく
+  `bridgeName`側のインターフェースに設定し直す必要がある**
+  (例: `networking.interfaces."br-pve".useDHCP = true;` や
+  `networking.interfaces."br-pve".ipv4.addresses = [ ... ];`)。
+  `parentIface`自身に`networking.interfaces`でIP/DHCP設定が残っていると
+  ブリッジポートとしての動作やホストの到達性と競合するため、事前に外して
+  おくこと。この設定変更をリモートホストに`nixos-rebuild switch --flake`で
+  適用する場合、切り替えの一瞬でリンクが揺れて接続が切れる可能性があるため、
+  可能であればコンソール(またはIPMI等の帯域外)アクセスがある状態で
+  作業すること。この設定自体は本モジュールの対象外。
 - **`system.stateVersion`**: 通常のNixOS構成同様、ホストの初回インストール時の
   リリースバージョンで固定しておくこと(本モジュールは設定しない)。
 - **SSH等のリモート管理手段**: `nixos-rebuild switch --flake .#myhost` を
@@ -128,4 +139,20 @@ Intel Core i5-10400、NIC `enp1s0`)でも一連の手順を実施し、以下を
   HTML応答が返ること(Podmanホスト自身からは前述のmacvlan制約により
   到達不可なのが期待通りであることも合わせて確認)。
 
-これにより [SPEC.md](SPEC.md) 6節の実機検証事項はすべて解消した。
+これにより [SPEC.md](SPEC.md) 6節の実機検証事項はすべて解消した(**ただし
+上記はmacvlan方式時点の検証結果である**)。
+
+**2026-08-16追記・ネットワーク方式変更後の未検証事項**: [SPEC.md](SPEC.md) 13節の
+理由により、ネットワーク方式をmacvlanからホスト側Linuxブリッジ+Podman
+bridgeネットワーク(`mode=unmanaged`)に変更した。この変更は設計・コード上の
+ものであり、以下はまだ実機で再検証していない。
+
+- `services.pvePodman.bridgeName`(`networking.bridges`)経由でのブリッジ作成、
+  および`podman-network-pve-bridge.service`の正常起動。
+- ホストOS自身のIP設定を物理NICからブリッジ側へ移設した状態での、
+  ホストの通常のLAN到達性(SSH等)に問題がないこと。
+- PVEコンテナ内でVMまたはネストしたLXCを起動し、そのMACアドレス宛の
+  フレームがLAN内の別端末との間で正しく往復すること(今回の方式変更の
+  本来の目的)。
+- Podmanホスト自身から `https://<PVE_IP>:8006` へ直接到達できること
+  (macvlan時代の制約が解消されている想定の確認)。

@@ -4,7 +4,7 @@
 #
 # Dockerfile の ENTRYPOINT はこのスクリプトを指す(entrypoint.sh を直接は指さない)。
 # systemd (PID1) が /etc/network/interfaces を読んで networking.service を
-# 起動する前に、macvlan向けの静的IP設定を書き出しておく必要があるため、
+# 起動する前に、bridge向けの静的IP設定を書き出しておく必要があるため、
 # generate-interfaces.sh を先に実行してから、
 # 本来の entrypoint.sh (dockur/proxmox オリジナル、無改造) へ exec する。
 #

@@ -8,7 +8,8 @@ Podman上でProxmox VE(PVE)をコンテナとして動かすための構成一�
 
 - Podman(rootful、`--systemd=always`)でPVEをコンテナ実行
 - ホストのKVM(`/dev/kvm`)をパススルーし、コンテナ内でVMを直接稼働
-- macvlanネットワークでコンテナにLAN直結IPを付与し、`vmbr0`経由でVMもLAN直結
+- ホスト側Linuxブリッジ+Podman bridgeネットワークでコンテナにLAN直結IPを付与し、
+  `vmbr0`経由でVMもLAN直結(macvlanを不採用にした経緯は[doc/SPEC.md](doc/SPEC.md) 13節参照)
 - ストレージはディレクトリベースのみ(LVM/ZFS/Cephは非対応)
 
 ## ディレクトリ構成
@@ -19,10 +20,10 @@ pve-podman/
 ├── src/
 │   ├── entrypoint.sh            # dockur/proxmox オリジナル(無改造)
 │   ├── network.sh               # dockur/proxmox オリジナル(無改造。NETWORK=Nで無効化して使う)
-│   ├── generate-interfaces.sh   # 環境変数からmacvlan構成のinterfacesを生成
+│   ├── generate-interfaces.sh   # 環境変数からbridge構成のinterfacesを生成
 │   └── entrypoint-wrapper.sh    # generate-interfaces.sh実行後、entrypoint.shへexec
 ├── host/
-│   └── setup-macvlan.sh         # Podmanホスト側でmacvlanネットワークを作成(非NixOSホスト向け)
+│   └── setup-bridge.sh          # Podmanホスト側でLinuxブリッジ+bridgeネットワークを作成(非NixOSホスト向け)
 ├── nixos/
 │   └── pve-podman.nix           # NixOSモジュール(ホスト設定+コンテナデプロイの宣言化)
 ├── flake.nix                    # 上記モジュールを公開するflake
@@ -35,9 +36,9 @@ pve-podman/
 ## セットアップ
 
 ```bash
-# 1. ホスト側でmacvlanネットワークを準備
+# 1. ホスト側でLinuxブリッジ+bridgeネットワークを準備
 PARENT_IFACE=eth0 SUBNET=192.168.1.0/24 GATEWAY=192.168.1.1 \
-  ./host/setup-macvlan.sh
+  ./host/setup-bridge.sh
 
 # 2. イメージをビルド
 podman build -t pve-podman:latest .
@@ -47,7 +48,7 @@ podman run -d \
   --name pve \
   --systemd=always \
   --privileged \
-  --network pve-macvlan --ip 192.168.1.50 \
+  --network pve-bridge --ip 192.168.1.50 \
   --device /dev/kvm \
   --device /dev/fuse \
   -e NETWORK=N \
@@ -91,12 +92,12 @@ podman rm -f pve
 # バックアップを取っていない場合、この操作で復元不能になる)
 podman volume rm pve-var-lib-vz pve-cluster
 
-# macvlanネットワーク削除
-podman network rm pve-macvlan
+# bridgeネットワーク削除(ホスト側Linuxブリッジ自体は別途 `ip link del br-pve` 等が必要)
+podman network rm pve-bridge
 ```
 
 ボリュームは削除せず、コンテナとネットワークだけ作り直したい場合は
-`podman rm -f pve` と `podman network rm pve-macvlan` のみ実行し、
+`podman rm -f pve` と `podman network rm pve-bridge` のみ実行し、
 ボリューム削除の手順は飛ばす。
 
 ## バックアップ / マイグレーション
@@ -110,7 +111,9 @@ podman network rm pve-macvlan
 起動確認に続き、実機(NixOSホスト、Intel)でもPodman + macvlan +
 `/dev/kvm`・`/dev/fuse`パススルーの組み合わせでビルド・起動・Web UI応答まで
 確認済み(詳細は [doc/SPEC.md](doc/SPEC.md) 6節、[doc/NIXOS.md](doc/NIXOS.md)
-検証状況を参照)。
+検証状況を参照)。**その後ネットワーク方式をmacvlanからホスト側Linuxブリッジ+
+Podman bridgeネットワークに変更した([doc/SPEC.md](doc/SPEC.md) 13節)ため、
+この新方式での実機再検証はまだ行っていない。**
 
 ## ライセンス
 
@@ -123,4 +126,4 @@ dockur/proxmoxからの無改造の取得物(詳細は [doc/SPEC.md](doc/SPEC.md
 ## Thanks
 
 - [dockur/proxmox](https://github.com/dockur/proxmox)
-  - Docker前提の実装をPodman + macvlan前提に作り替えたもの.
+  - Docker前提の実装をPodman前提に作り替えたもの.

@@ -2,7 +2,7 @@
 #
 # ベース: https://github.com/dockur/proxmox の Dockerfile (無改造部分が大半)
 # 変更点:
-#   - ENTRYPOINT を entrypoint-wrapper.sh に変更(macvlan用ネットワーク設定を先に実行するため)
+#   - ENTRYPOINT を entrypoint-wrapper.sh に変更(bridge用ネットワーク設定を先に実行するため)
 #   - src/ に generate-interfaces.sh, entrypoint-wrapper.sh を追加
 # 詳細は doc/SPEC.md を参照。
 
@@ -248,7 +248,7 @@ HEALTHCHECK --interval=60s --timeout=10s --start-period=60s --retries=3 \
     CMD ["curl", "-kLfSs", "http://localhost:8006"]
 
 # 変更点: entrypoint.sh を直接呼ばず、先に generate-interfaces.sh で
-# vmbr0(macvlan)向けの /etc/network/interfaces を書き出してから
+# vmbr0(bridge)向けの /etc/network/interfaces を書き出してから
 # 本来の entrypoint.sh へ exec する。
 ENTRYPOINT ["/usr/local/bin/entrypoint-wrapper.sh"]
 CMD ["/sbin/init", "--log-target=console", "--log-level=notice"]

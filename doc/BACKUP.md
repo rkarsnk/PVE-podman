@@ -56,11 +56,12 @@ podman start pve
 
 ### 2.2 新ホスト側の準備
 
-新ホストで [SPEC.md](SPEC.md) 8節の手順に従い、macvlanネットワークの作成と
-イメージビルドを先に済ませておく(コンテナはまだ起動しない)。
+新ホストで [SPEC.md](SPEC.md) 8節の手順に従い、ホスト側Linuxブリッジ+
+Podman bridgeネットワークの作成とイメージビルドを先に済ませておく
+(コンテナはまだ起動しない)。
 
 ```bash
-./host/setup-macvlan.sh
+./host/setup-bridge.sh
 podman build -t pve-podman:latest .
 ```
 
