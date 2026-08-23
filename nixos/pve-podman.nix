@@ -91,6 +91,20 @@ in
       default = true;
       description = "8006/tcp(PVE Web UI)をファイアウォールで開放するか。";
     };
+
+    extraVolumes = lib.mkOption {
+      type = lib.types.listOf lib.types.str;
+      default = [ ];
+      example = [ "/mnt/vm-images:/mnt/vm-images" "/srv/iso:/var/lib/vz/template/iso:ro" ];
+      description = ''
+        ホストの任意ディレクトリを追加でバインドマウントする。
+        `podman run -v` と同じ書式(`<hostPath>:<containerPath>[:opt,...]`)の
+        文字列をそのまま並べる。永続化用の名前付きボリューム
+        (`pve-var-lib-vz`, `pve-cluster`)とは別枠で、
+        `doc/BACKUP.md` のエクスポート/インポート対象にも含まれないため、
+        バックアップが必要ならホスト側で別途取得すること。
+      '';
+    };
   };
 
   config = lib.mkIf cfg.enable {
@@ -156,7 +170,7 @@ in
       volumes = [
         "pve-var-lib-vz:/var/lib/vz"
         "pve-cluster:/var/lib/pve-cluster"
-      ];
+      ] ++ cfg.extraVolumes;
       environment = {
         NETWORK = "N"; # dockur/proxmox標準のNAT機構を無効化(SPEC.md 決定事項5)
         PVE_IP = cfg.pveIp;

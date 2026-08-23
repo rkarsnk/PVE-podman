@@ -194,9 +194,15 @@ podman run -d \
   -e PVE_DNS="192.168.1.1" \
   -v pve-var-lib-vz:/var/lib/vz \
   -v pve-cluster:/var/lib/pve-cluster \
+  -v /mnt/vm-images:/mnt/vm-images \
   -p 8006:8006 \
   pve-podman:latest
 ```
+
+`-v /mnt/vm-images:/mnt/vm-images` のように、ホストの任意ディレクトリを
+`-v <hostPath>:<containerPath>[:opts]` で追加バインドマウントできる。
+`pve-var-lib-vz`/`pve-cluster` の名前付きボリュームとは別枠で、
+`doc/BACKUP.md` のエクスポート/インポート対象にも含まれない。
 
 ## 12. 参考
 

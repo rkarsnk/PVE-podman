@@ -57,12 +57,19 @@ podman run -d \
   -e PVE_DNS="192.168.1.1" \
   -v pve-var-lib-vz:/var/lib/vz \
   -v pve-cluster:/var/lib/pve-cluster \
+  -v /mnt/vm-images:/mnt/vm-images \
   -p 8006:8006 \
   pve-podman:latest
 ```
 
 起動後、LAN内の別端末から `https://192.168.1.50:8006` でPVEのWeb UIにアクセスできる
 (環境変数の詳細は [doc/SPEC.md](doc/SPEC.md) を参照)。
+
+ホストの任意ディレクトリを追加でバインドマウントしたい場合(VMイメージ置き場・
+ISO置き場など)は、`-v <hostPath>:<containerPath>[:opts]` を必要な数だけ追加する
+(上記例の `/mnt/vm-images` 行)。`pve-var-lib-vz`/`pve-cluster` の名前付きボリューム
+とは別枠で、[doc/BACKUP.md](doc/BACKUP.md) のエクスポート/インポート対象にも
+含まれないため、バックアップが必要ならホスト側で別途取得すること。
 
 ## NixOSホストでのデプロイ(flake)
 

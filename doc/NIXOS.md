@@ -33,6 +33,8 @@ Podman bridgeネットワーク作成)とコンテナのデプロイ
             gateway = "192.168.1.1";
             pveIp = "192.168.1.50";
             pveDns = "192.168.1.1";
+            # ホストの任意ディレクトリを追加でバインドマウントしたい場合(任意)。
+            extraVolumes = [ "/mnt/vm-images:/mnt/vm-images" ];
           };
         }
       ];
